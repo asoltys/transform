@@ -5,9 +5,11 @@ function list(val) {
 const program = require('commander')
 program
   .version('0.1.0')
-  .usage('[options] <file ...>')
+  .usage('[options] <file>')
+  .arguments('<file>')
   .option('-e, --empty [value]', 'Empty value [<NOVAL>]', '<NOVAL>')
-  .option('-p, --params <params>', 'List of parameters', list, 'COND,ODO,PH,TEMP,TURB,W.LVL')
+  .option('-p, --params <params>', 'List of parameters', list, 'BATVOLT,SPCOND,ODO,PH,EXOTEMP,TURBID,W. LVL,EXOTEMP')
+  .option('-y, --pretty <params>', 'Pretty names of parameters', list, 'Battery Voltage,SpCond,DO,pH,Water temp YSI,Turbidity,Stage,Water Temp PLS')
   .parse(process.argv)
 
 const fs = require('fs')
@@ -15,7 +17,7 @@ const parser = require('csv-parse')({
   relax_column_count: true
 })
 const transform = require('stream-transform')
-const input = fs.createReadStream(__dirname + '/apc.csv')
+const input = fs.createReadStream(__dirname + '/' + program.args[0])
 const output = {}
 const params = []
 
@@ -35,21 +37,21 @@ const transformer = transform((data, callback) => {
     
     if (minutes % 15 == 0) {
       if (!output[time]) output[time] = {}
-      if (!params.includes(param) && (!program.params || program.params.includes(param))) 
+      if (!params.includes(param) && (!program.params || program.params.includes(param))) {
         params.push(param)
+      }
 
       output[time][param] = value
     }
   }
-}, { parallel: 500 })
+}, { parallel: 500, consume: true })
 
 input
   .pipe(parser)
   .pipe(transformer)
-  .pipe(process.stdout)
 
 transformer.on('finish', () => { 
-  console.log('TIME,' + params.join(','))
+  console.log(output)
   Object.keys(output).forEach((time) => {
     row = time + ','
     params.forEach((param) => {
