@@ -1,22 +1,18 @@
-function list(val) {
-  return val.split(',');
-}
-
 const program = require('commander')
+const fs = require('fs')
+const parser = require('csv-parse')({ relax_column_count: true })
+const transform = require('stream-transform')
+const dateFormat = require('dateformat')
+
 program
   .version('0.1.0')
   .usage('[options] <file>')
   .arguments('<file>')
-  .option('-e, --empty [value]', 'Empty value [<NOVAL>]', '<NOVAL>')
-  .option('-p, --params <params>', 'List of parameters', list, 'BATVOLT,SPCOND,ODO,PH,EXOTEMP,TURBID,W. LVL,EXOTEMP')
+  .option('-e, --empty [value]', 'Empty value [NAN]', 'NAN')
+  .option('-p, --params <params>', 'List of parameters', list, 'BATVOLT,SPCOND,ODO,PH,EXOTEMP,TURBID,W. LVL,PLSTEMP')
   .option('-y, --pretty <params>', 'Pretty names of parameters', list, 'Battery Voltage,SpCond,DO,pH,Water temp YSI,Turbidity,Stage,Water Temp PLS')
   .parse(process.argv)
 
-const fs = require('fs')
-const parser = require('csv-parse')({
-  relax_column_count: true
-})
-const transform = require('stream-transform')
 const input = fs.createReadStream(__dirname + '/' + program.args[0])
 const output = {}
 const params = []
@@ -31,10 +27,8 @@ const transformer = transform((data, callback) => {
   let value = data[3]
 
   if (!isNaN(date)) {
-    hours = time.getHours()
     minutes = time.getMinutes()
-    time = time.toTimeString().substr(0,5)
-    
+    time = dateFormat(time, 'yyyy-mm-dd HH:MM') 
     if (minutes % 15 == 0) {
       if (!output[time]) output[time] = {}
       if (!params.includes(param) && (!program.params || program.params.includes(param))) {
@@ -44,17 +38,19 @@ const transformer = transform((data, callback) => {
       output[time][param] = value
     }
   }
-}, { parallel: 500, consume: true })
+
+  callback(null, data.join(',') + '\n')
+}, { parallel: 5000, consume: true })
 
 input
   .pipe(parser)
   .pipe(transformer)
 
-transformer.on('finish', () => { 
-  console.log(output)
+transformer.on('end', () => { 
+  console.log('Date/Time,' + program.pretty)
   Object.keys(output).forEach((time) => {
     row = time + ','
-    params.forEach((param) => {
+    program.params.split(',').forEach((param) => {
       let v = output[time][param]
       if (!v) v = program.empty
       row += v + ','
@@ -62,3 +58,7 @@ transformer.on('finish', () => {
     console.log(row.slice(0,-1))
   })
 })
+
+function list(val) {
+  return val.split(',');
+}
